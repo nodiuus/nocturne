@@ -92,6 +92,14 @@ void disassembler::dump_vm_bytecode(const uint8_t* code, size_t length, const ch
             offset += 4;
             break;
         }
+        case op_div: {
+            if (offset + 4 > length) goto invalid;
+            printf("%02X %02X %02X   DIV r%u, r%u, r%u\n",
+                code[offset + 1], code[offset + 2], code[offset + 3],
+                code[offset + 1], code[offset + 2], code[offset + 3]);
+            offset += 4;
+            break;
+        }
         case op_and: {
             if (offset + 4 > length) goto invalid;
             printf("%02X %02X %02X   AND r%u, r%u, r%u\n",
@@ -300,4 +308,3 @@ void disassembler::dump_vm_bytecode(const uint8_t* code, size_t length, const ch
     }
     printf("========================================\n");
 }
-

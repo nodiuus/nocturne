@@ -86,6 +86,7 @@ void vm_builder::emit_shl(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_shl); 
 void vm_builder::emit_shr(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_shr); emit_u8(dst); emit_u8(a); emit_u8(b); }
 void vm_builder::emit_sar(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_sar); emit_u8(dst); emit_u8(a); emit_u8(b); }
 void vm_builder::emit_mul(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_mul); emit_u8(dst); emit_u8(a); emit_u8(b); }
+void vm_builder::emit_div(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_div); emit_u8(dst); emit_u8(a); emit_u8(b); }
 void vm_builder::emit_sub(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_sub); emit_u8(dst); emit_u8(a); emit_u8(b); }
 void vm_builder::emit_cmp(uint8_t a, uint8_t b) { emit_u8(op_cmp); emit_u8(a); emit_u8(b); }
 void vm_builder::emit_push(uint8_t src) { emit_u8(op_push); emit_u8(src); }
@@ -141,5 +142,4 @@ void vm_builder::emit_xchg_mem64(uint8_t base, int32_t offset, uint8_t reg) {
 }
 
 uint32_t vm_builder::get_current_position() { return vm.ip; }
-
 
