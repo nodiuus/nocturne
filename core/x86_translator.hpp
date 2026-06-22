@@ -30,14 +30,20 @@ private:
         const ZydisDecodedOperand* operands, uint64_t current_addr);
     bool translate_add(const ZydisDecodedInstruction* instruction,
         const ZydisDecodedOperand* operands, uint64_t current_addr);
-    bool translate_and(const ZydisDecodedOperand* operands);
+    bool translate_and(const ZydisDecodedInstruction* instruction,
+        const ZydisDecodedOperand* operands, uint64_t current_addr);
     bool translate_or(const ZydisDecodedOperand* operands);
     bool translate_xor(const ZydisDecodedOperand* operands);
     bool translate_not(const ZydisDecodedOperand* operands);
     bool translate_shift(const ZydisDecodedOperand* operands, uint8_t op);
     bool translate_test(const ZydisDecodedOperand* operands);
-    bool translate_sub(const ZydisDecodedOperand* operands);
+    bool translate_sub(const ZydisDecodedInstruction* instruction,
+        const ZydisDecodedOperand* operands, uint64_t current_addr);
     bool translate_imul(const ZydisDecodedOperand* operands);
+    bool translate_mul(const ZydisDecodedInstruction* instruction,
+        const ZydisDecodedOperand* operands, uint64_t current_addr);
+    bool translate_div(const ZydisDecodedInstruction* instruction,
+        const ZydisDecodedOperand* operands, uint64_t current_addr);
     bool translate_cmp(const ZydisDecodedInstruction* instruction,
         const ZydisDecodedOperand* operands, uint64_t current_addr);
     bool translate_cmpxchg(const ZydisDecodedInstruction* instruction,
@@ -64,7 +70,9 @@ private:
         const ZydisDecodedOperand* operands, uint64_t current_addr);
     bool translate_movsx(const ZydisDecodedInstruction* instruction,
         const ZydisDecodedOperand* operands, uint64_t current_addr);
+    bool translate_movsb();
     bool translate_cmovnz(const ZydisDecodedOperand* operands);
+    bool translate_cmovb(const ZydisDecodedOperand* operands);
     bool translate_setz(const ZydisDecodedOperand* operands);
     bool translate_setnz(const ZydisDecodedOperand* operands);
     bool resolve_memory_address(const ZydisDecodedInstruction* instruction,

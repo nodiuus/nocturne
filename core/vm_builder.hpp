@@ -35,6 +35,7 @@ public:
     void emit_shr(uint8_t dst, uint8_t a, uint8_t b);
     void emit_sar(uint8_t dst, uint8_t a, uint8_t b);
     void emit_mul(uint8_t dst, uint8_t a, uint8_t b);
+    void emit_div(uint8_t dst, uint8_t a, uint8_t b);
     void emit_cmp(uint8_t a, uint8_t b);
     void emit_push(uint8_t src);
     void emit_pop(uint8_t dst);
@@ -56,5 +57,4 @@ public:
 
     uint32_t get_current_position();
 };
-
 
