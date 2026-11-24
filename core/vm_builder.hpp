@@ -14,13 +14,13 @@ private:
 public:
     vm_builder(vm_state& vm_state);
 
-    void emit_u8(uint8_t value);
-    void emit_u32(uint32_t value);
-    void emit_u64(uint64_t value);
-    void emit_i32(int32_t value);
+    bool emit_u8(uint8_t value);
+    bool emit_u32(uint32_t value);
+    bool emit_u64(uint64_t value);
+    bool emit_i32(int32_t value);
 
     void mark_jump_target(uint64_t x86_address);
-    void emit_jump(uint8_t jump_type, uint64_t x86_target);
+    bool emit_jump(uint8_t jump_type, uint64_t x86_target);
     void resolve_jumps();
 
     void emit_mov_imm(uint8_t dst, uint64_t imm);

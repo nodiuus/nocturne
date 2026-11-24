@@ -7,37 +7,38 @@ vm_builder::vm_builder(vm_state& vm_state) : vm(vm_state) {
     vm.code_size = 0;
 }
 
-void vm_builder::emit_u8(uint8_t value) {
+bool vm_builder::emit_u8(uint8_t value) {
     if (!vm.code || vm.ip >= vm.code_capacity) {
         std::cerr << "vm_builder: bytecode buffer overflow\n";
-        return;
+        return false;
     }
     vm.code[vm.ip++] = value;
     if (vm.ip > vm.code_size) {
         vm.code_size = vm.ip;
     }
+    return true;
 }
 
-void vm_builder::emit_u32(uint32_t value) {
-    emit_u8(static_cast<uint8_t>(value & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 8) & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 16) & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 24) & 0xFF));
+bool vm_builder::emit_u32(uint32_t value) {
+    return emit_u8(static_cast<uint8_t>(value & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 8) & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 16) & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 24) & 0xFF));
 }
 
-void vm_builder::emit_u64(uint64_t value) {
-    emit_u8(static_cast<uint8_t>(value & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 8) & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 16) & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 24) & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 32) & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 40) & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 48) & 0xFF));
-    emit_u8(static_cast<uint8_t>((value >> 56) & 0xFF));
+bool vm_builder::emit_u64(uint64_t value) {
+    return emit_u8(static_cast<uint8_t>(value & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 8) & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 16) & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 24) & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 32) & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 40) & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 48) & 0xFF))
+        && emit_u8(static_cast<uint8_t>((value >> 56) & 0xFF));
 }
 
-void vm_builder::emit_i32(int32_t value) {
-    emit_u32(static_cast<uint32_t>(value));
+bool vm_builder::emit_i32(int32_t value) {
+    return emit_u32(static_cast<uint32_t>(value));
 }
 
 void vm_builder::mark_jump_target(uint64_t x86_address) {
@@ -47,10 +48,10 @@ void vm_builder::mark_jump_target(uint64_t x86_address) {
     }
 }
 
-void vm_builder::emit_jump(uint8_t jump_type, uint64_t x86_target) {
-    emit_u8(jump_type);
+bool vm_builder::emit_jump(uint8_t jump_type, uint64_t x86_target) {
+    if (!emit_u8(jump_type)) return false;
     pending_jumps.push_back({ vm.ip, x86_target });
-    emit_i32(0);
+    return emit_i32(0);
 }
 
 void vm_builder::resolve_jumps() {

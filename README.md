@@ -82,3 +82,15 @@ argparse
 First and foremost, this is mostly a POC project. Please don't expect it to be **too** stable. With that being said, I will be progressively adding more features/fixes to this as time goes on.
 
 If there are any features / handlers you want implemented, I implore you to open an issue. I welcome any and all contributions.
+
+# License
+
+This project is source-available, not open source.
+
+The source code is available under the PolyForm Noncommercial License 1.0.0.
+
+You may use, study, modify, and share this software for noncommercial purposes, subject to the license terms.
+
+Commercial use, enterprise use, internal company use, production business use, hosted services, paid products, client work, consulting work, or organizational deployment is not permitted without a separate written license.
+
+For commercial or enterprise licensing, contact: nshaul2006@gmail.com / @nodiuus 
