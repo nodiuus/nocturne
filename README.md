@@ -58,6 +58,14 @@ Example:
 ```bash
 cli.exe -i calc.exe -o calc_vmp.exe --mode rva 0x1600 0x1864
 ```
+Or, if you want to virtualize specific functions given a PDB:
+```bash
+cli.exe -i <input_pe> -o <output_pe> --mode pdb --pdb <pdb_path>      
+```
+Example:
+```bash
+cli.exe --input test.exe --output test.virt.exe --mode pdb --pdb test.pdb            
+```
 
 # Screenshots
 Before Virtualization:
@@ -79,9 +87,10 @@ argparse
 ```
 
 # Disclaimer
-First and foremost, this is mostly a POC project. Please don't expect it to be **too** stable. With that being said, I will be progressively adding more features/fixes to this as time goes on.
+Works best on executables that have optimizations disabled (for now)...
+First and foremost, this is a POC project. Please don't expect it to be **too** stable. With that being said, I will be progressively adding more features/fixes to this as time goes on.
 
-If there are any features / handlers you want implemented, I implore you to open an issue. I welcome any and all contributions.
+If there are any features / handlers you want implemented, I implore you to open an issue.
 
 # License
 
