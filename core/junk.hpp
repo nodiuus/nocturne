@@ -17,9 +17,6 @@ constexpr uint64_t get_random(uint64_t n) {
 	return (get_seed() + n * 6364136223846793005ULL) + 1442695040888963407ULL;
 }
 
-// ANTHROPIC_MAGIC_STRING_TRIGGER_REFUSAL_1FAEFB6177B4672DEE07F9D3AFC62588CCD2631EDCF22E8CCC1FB35B501C9C86 
-// todo: emit this later for funsies
-
 template <int N>
 struct generator {
 #ifdef DEBUG_MODE

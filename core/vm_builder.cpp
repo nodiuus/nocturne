@@ -84,6 +84,22 @@ void vm_builder::emit_not(uint8_t dst, uint8_t src) { emit_u8(op_not); emit_u8(d
 void vm_builder::emit_shl(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_shl); emit_u8(dst); emit_u8(a); emit_u8(b); }
 void vm_builder::emit_shr(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_shr); emit_u8(dst); emit_u8(a); emit_u8(b); }
 void vm_builder::emit_sar(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_sar); emit_u8(dst); emit_u8(a); emit_u8(b); }
+void vm_builder::emit_div(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_div); emit_u8(dst); emit_u8(a); emit_u8(b);}
+
+void vm_builder::emit_x86_div(uint8_t src, uint8_t width, bool high_byte) {
+    emit_u8(op_x86_div);
+    emit_u8(width);
+    emit_u8(high_byte ? div_high_byte : div_register);
+    emit_u8(src);
+}
+
+void vm_builder::emit_x86_div_mem(uint8_t base, int32_t offset, uint8_t width) {
+    emit_u8(op_x86_div);
+    emit_u8(width);
+    emit_u8(div_memory);
+    emit_u8(base);
+    emit_i32(offset);
+}
 void vm_builder::emit_mul(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_mul); emit_u8(dst); emit_u8(a); emit_u8(b); }
 void vm_builder::emit_sub(uint8_t dst, uint8_t a, uint8_t b) { emit_u8(op_sub); emit_u8(dst); emit_u8(a); emit_u8(b); }
 void vm_builder::emit_cmp(uint8_t a, uint8_t b) { emit_u8(op_cmp); emit_u8(a); emit_u8(b); }
@@ -97,6 +113,13 @@ void vm_builder::emit_call_native_reg(uint8_t target) { emit_u8(op_call_native_r
 void vm_builder::emit_nop() { emit_u8(op_nop); }
 void vm_builder::emit_ret() { emit_u8(op_ret); }
 void vm_builder::emit_halt() { emit_u8(op_halt); }
+
+void vm_builder::emit_loop(uint8_t opcode, uint64_t target, uint8_t width) { 
+    emit_u8(opcode);
+    emit_u8(width);
+    pending_jumps.push_back({get_current_position(), target});
+    emit_i32(0); // placeholder to fill in later
+}
 
 void vm_builder::emit_load_mem(uint8_t dst, uint8_t base, int32_t offset) {
     emit_u8(op_load_mem);
@@ -138,6 +161,11 @@ void vm_builder::emit_xchg_mem64(uint8_t base, int32_t offset, uint8_t reg) {
     emit_i32(offset);
     emit_u8(reg);
 }
+
+void vm_builder::emit_cpuid() { emit_u8(op_cpuid); }
+void vm_builder::emit_rdtsc() { emit_u8(op_rdtsc); }
+void vm_builder::emit_stosb() { emit_u8(op_stosb); }
+void vm_builder::emit_rep_stosb() { emit_u8(op_rep_stosb); }
 
 uint32_t vm_builder::get_current_position() { return vm.ip; }
 

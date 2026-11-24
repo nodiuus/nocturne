@@ -9,8 +9,6 @@ class pe_rewriter {
 public:
     explicit pe_rewriter(LIEF::PE::Binary& pe, std::string section_name = ".nctrn");
 
-    const std::string& section_name() const;
-
     uint32_t add_vm_section(const std::vector<uint8_t>& bytecode);
     bool patch_function(uint32_t function_rva, uint32_t end_rva, uint32_t bytecode_rva, uint32_t bytecode_size);
 

@@ -37,6 +37,7 @@ private:
     bool translate_shift(const ZydisDecodedOperand* operands, uint8_t op);
     bool translate_test(const ZydisDecodedOperand* operands);
     bool translate_sub(const ZydisDecodedOperand* operands);
+    bool translate_div(const ZydisDecodedInstruction* instruction, const ZydisDecodedOperand* operands, uint64_t current_addr);
     bool translate_imul(const ZydisDecodedOperand* operands);
     bool translate_cmp(const ZydisDecodedInstruction* instruction,
         const ZydisDecodedOperand* operands, uint64_t current_addr);
@@ -54,6 +55,7 @@ private:
         const ZydisDecodedOperand* operands, uint64_t current_addr);
     bool translate_call(const ZydisDecodedInstruction* instruction,
         const ZydisDecodedOperand* operands, uint64_t current_addr);
+    bool translate_loop(const ZydisDecodedInstruction* instruction, const ZydisDecodedOperand* operand, uint64_t current_call, uint8_t vm_loop_type);
     bool translate_jump(const ZydisDecodedInstruction* instruction,
         const ZydisDecodedOperand* operands, uint64_t current_addr,
         uint8_t vm_jump_type);
@@ -66,6 +68,7 @@ private:
         const ZydisDecodedOperand* operands, uint64_t current_addr);
     bool translate_cmovnz(const ZydisDecodedOperand* operands);
     bool translate_setz(const ZydisDecodedOperand* operands);
+    bool translate_stosb(const ZydisDecodedInstruction* instruction, const ZydisDecodedOperand* operands);
     bool translate_setnz(const ZydisDecodedOperand* operands);
     bool resolve_memory_address(const ZydisDecodedInstruction* instruction,
         const ZydisDecodedOperand* operand, uint64_t current_addr,

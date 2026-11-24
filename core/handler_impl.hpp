@@ -262,6 +262,73 @@ vm_inline bool handlers::handle_div(vm_state& vm, UNUSED vm_flags& flags) {
     return true;
 }
 
+vm_inline bool handlers::handle_x86_div(vm_state& vm, UNUSED vm_flags& flags) {
+    uint8_t width = 0;
+    uint8_t source = 0;
+    uint8_t reg = 0;
+    if (!fetch_u8_or_halt(vm, width) || !fetch_u8_or_halt(vm, source) || !fetch_valid_reg(vm, reg)) {
+        return false;
+    }
+    if ((width != 8 && width != 16 && width != 32 && width != 64) || source > div_memory) {
+        return halt_vm(vm);
+    }
+
+    uint64_t divisor = vm.regs[reg];
+    if (source == div_high_byte) {
+        if (width != 8 || reg > 3) {
+            return halt_vm(vm);
+        }
+        divisor >>= 8;
+    } else if (source == div_memory) {
+        int32_t offset = 0;
+        uint64_t address = 0;
+        if (!fetch_i32_or_halt(vm, offset) || !resolve_address(vm, reg, offset, address)) {
+            return false;
+        }
+        const uint32_t size = width / 8;
+        const volatile uint8_t* bytes = vm_memory_ptr(vm, address, size);
+        if (!bytes) {
+            bytes = reinterpret_cast<const volatile uint8_t*>(address);
+        }
+        divisor = 0;
+        for (uint32_t i = 0; i < size; ++i) {
+            divisor |= static_cast<uint64_t>(bytes[i]) << (i * 8);
+        }
+    }
+
+    const uint64_t mask = width == 64 ? UINT64_MAX : (uint64_t(1) << width) - 1;
+    divisor &= mask;
+    const uint64_t low = vm.regs[0] & mask;
+    const uint64_t high = (width == 8 ? vm.regs[0] >> 8 : vm.regs[3]) & mask;
+
+    // high >= divisor means the quotient cannot fit in the destination width.
+    // Keep the VM's existing error policy: halt without changing the results.
+    if (divisor == 0 || high >= divisor) {
+        return halt_vm(vm);
+    }
+
+    uint64_t quotient = 0;
+    uint64_t remainder = 0;
+    if (width == 64) {
+        quotient = _udiv128(high, low, divisor, &remainder);
+    } else {
+        const uint64_t dividend = (high << width) | low;
+        quotient = dividend / divisor;
+        remainder = dividend % divisor;
+    }
+
+    if (width == 8) {
+        vm.regs[0] = (vm.regs[0] & ~uint64_t(0xFFFF)) | quotient | (remainder << 8);
+    } else if (width == 16) {
+        vm.regs[0] = (vm.regs[0] & ~mask) | quotient;
+        vm.regs[3] = (vm.regs[3] & ~mask) | remainder;
+    } else {
+        vm.regs[0] = quotient;
+        vm.regs[3] = remainder;
+    }
+    return true;
+}
+
 vm_inline bool handlers::handle_and(vm_state& vm, UNUSED vm_flags& flags) {
     return apply_binary_reg_op(vm, and_u64);
 }
@@ -415,6 +482,62 @@ vm_inline bool handlers::handle_jge(vm_state& vm, vm_flags& flags) {
     return true;
 }
 
+vm_inline bool handlers::handle_jb(vm_state& vm, vm_flags& flags) {
+    uint32_t target = 0;
+
+    if (!fetch_jump_target(vm, target)) {
+        return false;
+    }
+
+    if (flags.cf) {
+        vm.ip = target;
+    }
+
+    return true;
+}
+
+vm_inline bool handlers::handle_jbe(vm_state& vm, vm_flags& flags) {
+    uint32_t target = 0;
+
+    if (!fetch_jump_target(vm, target)) {
+        return false;
+    }
+
+    if (flags.cf || flags.zf) {
+        vm.ip = target;
+    }
+
+    return true;
+}
+
+vm_inline bool handlers::handle_jae(vm_state& vm, vm_flags& flags) {
+    uint32_t target = 0;
+
+    if (!fetch_jump_target(vm, target)) {
+        return false;
+    }
+
+    if (!flags.cf) {
+        vm.ip = target;
+    }
+
+    return true;
+}
+
+vm_inline bool handlers::handle_ja(vm_state& vm, vm_flags& flags) {
+    uint32_t target = 0;
+
+    if (!fetch_jump_target(vm, target)) {
+        return false;
+    }
+
+    if (!flags.cf && !flags.zf) {
+        vm.ip = target;
+    }
+
+    return true;
+}
+
 vm_inline bool handlers::handle_push(vm_state& vm, UNUSED vm_flags& flags) {
     uint8_t src = 0;
     if (!fetch_reg1(vm, src)) {
@@ -473,6 +596,104 @@ vm_inline bool handlers::handle_call(vm_state& vm, UNUSED vm_flags& flags) {
     sp -= 8;
     write_u64_le(vm_memory_ptr(vm, sp, 8), static_cast<uint64_t>(vm.ip));
     vm.ip = target;
+    return true;
+}
+
+vm_inline bool handlers::handle_loop(vm_state& vm, vm_flags& flags) {
+    // TODO: at some point just combine LOOP/LOOPNE/LOOPE functionality into one handler
+    
+    uint8_t width = 0;
+
+    if (!fetch_u8_or_halt(vm, width)) {
+        return false;
+    }
+
+    if (width != 32 && width != 64) {
+        return halt_vm(vm);
+    }
+
+    uint32_t target = 0;
+
+    if (!fetch_jump_target(vm, target)) {
+        return false;
+    }
+
+    if (width == 32) {
+        vm.regs[2] = static_cast<uint32_t>(vm.regs[2] - 1);
+    } else {
+        --vm.regs[2];
+    }
+
+    if (vm.regs[2] != 0) {
+        vm.ip = target;
+    }
+
+    return true;
+}
+
+vm_inline bool handlers::handle_loope(vm_state& vm, vm_flags& flags) {
+    // TODO: at some point just combine LOOP/LOOPNE/LOOPE functionality into one handler
+
+    uint8_t width = 0;
+
+    if (!fetch_u8_or_halt(vm, width)) {
+        return false;
+    }
+
+    if (width != 32 && width != 64) {
+        return halt_vm(vm);
+    }
+
+    uint32_t target = 0;
+
+    if (!fetch_jump_target(vm, target)) {
+        return false;
+    }
+
+    if (width == 32) {
+        vm.regs[2] = static_cast<uint32_t>(vm.regs[2] - 1);
+    }
+    else {
+        --vm.regs[2];
+    }
+
+    if (vm.regs[2] != 0 && flags.zf) {
+        vm.ip = target;
+    }
+
+    return true;
+}
+
+vm_inline bool handlers::handle_loopne(vm_state& vm, vm_flags& flags) {
+    // TODO: at some point just combine LOOP/LOOPNE/LOOPE functionality into one handler
+
+    uint8_t width = 0;
+
+    if (!fetch_u8_or_halt(vm, width)) {
+        return false;
+    }
+
+    if (width != 32 && width != 64) {
+        return halt_vm(vm);
+    }
+
+    uint32_t target = 0;
+
+    if (!fetch_jump_target(vm, target)) {
+        return false;
+    }
+
+    if (width == 32) {
+        vm.regs[2] = static_cast<uint32_t>(vm.regs[2] - 1);
+    }
+    else {
+        --vm.regs[2];
+    }
+
+    if (vm.regs[2] != 0 && !flags.zf) {
+        vm.ip = target;
+    }
+
     return true;
 }
 
@@ -682,6 +903,65 @@ vm_inline bool handlers::handle_xchg_mem64(vm_state& vm, UNUSED vm_flags& flags)
     }
 
     vm.regs[reg] = old;
+    return true;
+}
+
+vm_inline bool handlers::handle_rdtsc(vm_state& vm, UNUSED vm_flags& flags) {
+	const uint64_t value = __rdtsc();
+    vm.regs[0] = static_cast<uint32_t>(value);          // low 32 bits
+	vm.regs[3] = static_cast<uint32_t>(value >> 32);    // high 32 bits
+    return true;
+}
+
+vm_inline bool handlers::handle_cpuid(vm_state& vm, UNUSED vm_flags& flags) {
+    int result[4];
+
+    const int mode = static_cast<int>(vm.regs[0]); //rax
+    const int subleaf = static_cast<int>(vm.regs[2]);
+
+    __cpuidex(result, mode, subleaf);
+
+    // RAX, RBX, RCX, RDX
+
+    vm.regs[0] = static_cast<uint32_t>(result[0]); // rax
+    vm.regs[1] = static_cast<uint32_t>(result[1]); // rbx
+    vm.regs[2] = static_cast<uint32_t>(result[2]); // rcx
+    vm.regs[3] = static_cast<uint32_t>(result[3]); // rdx
+    return true;
+}
+
+vm_inline bool handlers::handle_stosb(vm_state& vm, vm_flags& flags) {
+    const auto value = static_cast<uint8_t>(vm.regs[0]);
+
+    *reinterpret_cast<uint8_t*>(vm.regs[5]) = value;
+    
+    if (flags.df) {
+        --vm.regs[5];
+    } else {
+        ++vm.regs[5];
+    }
+
+    return true;
+}
+
+vm_inline bool handlers::handle_rep_stosb(vm_state& vm, vm_flags& flags) {
+    const auto value = static_cast<std::uint8_t>(vm.regs[0]);
+    auto& count = vm.regs[2];
+    auto& destination = vm.regs[5];
+
+    while (count != 0) {
+        *reinterpret_cast<std::uint8_t*>(destination) = value;
+
+        if (flags.df) {
+            --destination;
+        }
+        else {
+            ++destination;
+        }
+
+        --count;
+    }
+
     return true;
 }
 

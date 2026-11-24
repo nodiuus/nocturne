@@ -178,7 +178,7 @@ vm_inline void vm_initialize_state_internal(vm_state& vm, uint8_t* code_buffer, 
 template<bool trace_enabled>
 static vm_inline void run_vm_logic(vm_state& vm, vm_flags& flags) {
     //vmenter
-    generator<500>::generate_junk();
+    generator<250>::generate_junk();
 
     if (!vm.code || vm.code_size == 0 || !vm.memory || vm.memory_size == 0) {
         return;
@@ -199,7 +199,7 @@ static vm_inline void run_vm_logic(vm_state& vm, vm_flags& flags) {
     }
 
     int instruction_count = 0;
-    const int MAX_INSTRUCTIONS = 1000000; 
+    constexpr int MAX_INSTRUCTIONS = 1000000; 
  
     generator<20>::generate_junk();
     while (!vm.halted && vm.ip < vm.code_size && instruction_count < MAX_INSTRUCTIONS) {
@@ -231,6 +231,9 @@ static vm_inline void run_vm_logic(vm_state& vm, vm_flags& flags) {
             break;
         case op_div:
             handlers::handle_div(vm, flags);
+            break;
+        case op_x86_div:
+            handlers::handle_x86_div(vm, flags);
             break;
         case op_load_mem:
             handlers::handle_load_mem(vm, flags);
@@ -283,6 +286,18 @@ static vm_inline void run_vm_logic(vm_state& vm, vm_flags& flags) {
         case op_jle:
             handlers::handle_jle(vm, flags);
             break;
+        case op_jb:
+            handlers::handle_jb(vm, flags);
+            break;
+        case op_jbe:
+            handlers::handle_jbe(vm, flags);
+            break;
+        case op_jae:
+            handlers::handle_jae(vm, flags);
+            break;
+        case op_ja:
+            handlers::handle_ja(vm, flags);
+            break;
         case op_jge:
             handlers::handle_jge(vm, flags);
             break;
@@ -318,6 +333,27 @@ static vm_inline void run_vm_logic(vm_state& vm, vm_flags& flags) {
             break;
         case op_call:
             handlers::handle_call(vm, flags);
+            break;
+        case op_rdtsc:
+            handlers::handle_rdtsc(vm, flags);
+			break;
+        case op_cpuid:
+            handlers::handle_cpuid(vm, flags);
+            break;
+        case op_stosb:
+            handlers::handle_stosb(vm, flags);
+            break;
+        case op_rep_stosb:
+            handlers::handle_rep_stosb(vm, flags);
+            break;
+        case op_loop:
+            handlers::handle_loop(vm, flags);
+            break;
+        case op_loope:
+            handlers::handle_loope(vm, flags);
+            break;
+        case op_loopne:
+            handlers::handle_loopne(vm, flags);
             break;
         case op_ret:
             handlers::handle_ret(vm, flags);

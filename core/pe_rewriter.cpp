@@ -120,10 +120,6 @@ pe_rewriter::pe_rewriter(LIEF::PE::Binary& pe, std::string section_name)
     : pe_(pe), section_name_(std::move(section_name)) {
 }
 
-const std::string& pe_rewriter::section_name() const {
-    return section_name_;
-}
-
 uint32_t pe_rewriter::add_vm_section(const std::vector<uint8_t>& bytecode) {
     if (vm_section_created_) {
         auto* existing = pe_.get_section(section_name_);

@@ -18,9 +18,11 @@ struct symbol_info {
 class pdb_parser {
 public:
 	pdb_parser(std::string path);
-	void parse();
+	std::string to_utf8(const std::wstring& value);
 	void print_info();
+	void print_undecorated_names();
 
+	std::vector<symbol_info> get_symbols() const;
 private:
 	std::string pdb_path;
 	std::vector<symbol_info> info;

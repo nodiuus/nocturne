@@ -389,3 +389,6 @@ FodyWeavers.xsd
 /code_virtualizer/test_protected_fixed.exe
 /code_virtualizer/trampoline_debug.txt
 /code_virtualizer/trampoline_fix_test.txt
+
+# Local test suites
+/tests/

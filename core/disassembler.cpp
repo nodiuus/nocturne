@@ -159,15 +159,27 @@ void disassembler::dump_vm_bytecode(const uint8_t* code, size_t length, const ch
             offset += 3;
             break;
         }
-        case op_jmp: case op_jz: case op_jnz: case op_jl: case op_jg: case op_jle: case op_jge: {
+        case op_jmp: case op_jz: case op_jnz: case op_jl: case op_jg: case op_jle: case op_jge:
+        case op_jb: case op_jbe: case op_jae: case op_ja: {
             if (offset + 5 > length) goto invalid;
             int32_t target;
             memcpy(&target, &code[offset + 1], 4);
-            const char* jmp_name[] = { "???", "???", "???", "???", "???", "???", "???", "???",
-                                     "???", "???", "???", "???", "???", "???", "???", "???",
-                                     "JMP", "JZ", "CMP", "JNZ", "JL", "JG", "JLE", "JGE" };
+            const char* jmp_name = "???";
+            switch (opcode) {
+            case op_jmp: jmp_name = "JMP"; break;
+            case op_jz:  jmp_name = "JZ";  break;
+            case op_jnz: jmp_name = "JNZ"; break;
+            case op_jl:  jmp_name = "JL";  break;
+            case op_jg:  jmp_name = "JG";  break;
+            case op_jle: jmp_name = "JLE"; break;
+            case op_jge: jmp_name = "JGE"; break;
+            case op_jb:  jmp_name = "JB";  break;
+            case op_jbe: jmp_name = "JBE"; break;
+            case op_jae: jmp_name = "JAE"; break;
+            case op_ja:  jmp_name = "JA";  break;
+            }
             printf("%08X %s %+d (target: %04zX)\n", target,
-                jmp_name[opcode], target, offset + 5 + target);
+                jmp_name, target, offset + 5 + target);
             offset += 5;
             break;
         }
@@ -222,6 +234,18 @@ void disassembler::dump_vm_bytecode(const uint8_t* code, size_t length, const ch
             uint8_t target = code[offset + 1];
             printf("%02X         CALL_NATIVE_REG r%u\n", target, target);
             offset += 2;
+            break;
+        }
+        case op_loop: case op_loope: case op_loopne: {
+            if (offset + 6 > length) goto invalid;
+            uint8_t width = code[offset + 1];
+            int32_t target;
+            memcpy(&target, &code[offset + 2], 4);
+            const char* name = opcode == op_loop ? "LOOP" :
+                               opcode == op_loope ? "LOOPE" : "LOOPNE";
+            printf("%02X %08X %s%u %+d (target: %04zX)\n",
+                width, target, name, width, target, offset + 6 + target);
+            offset += 6;
             break;
         }
         case op_load_mem: {
@@ -283,8 +307,41 @@ void disassembler::dump_vm_bytecode(const uint8_t* code, size_t length, const ch
             offset += 7;
             break;
         }
+        case op_x86_div: {
+            if (offset + 4 > length) goto invalid;
+            uint8_t width = code[offset + 1];
+            uint8_t source = code[offset + 2];
+            uint8_t reg = code[offset + 3];
+            if (source == div_memory) {
+                if (offset + 8 > length) goto invalid;
+                int32_t displacement;
+                memcpy(&displacement, &code[offset + 4], 4);
+                printf("          DIV%u [r%u %+d]\n", width, reg, displacement);
+                offset += 8;
+            } else {
+                printf("          DIV%u r%u%s\n", width, reg, source == div_high_byte ? "[15:8]" : "");
+                offset += 4;
+            }
+            break;
+        }
         case op_ret:
             printf("          RET\n");
+            offset += 1;
+            break;
+        case op_rdtsc:
+            printf("          RDTSC\n");
+            offset += 1;
+            break;
+        case op_cpuid:
+            printf("          CPUID\n");
+            offset += 1;
+            break;
+        case op_stosb:
+            printf("          STOSB\n");
+            offset += 1;
+            break;
+        case op_rep_stosb:
+            printf("          REP STOSB\n");
             offset += 1;
             break;
         case op_halt:

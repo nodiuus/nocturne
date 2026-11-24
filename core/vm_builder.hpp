@@ -34,6 +34,9 @@ public:
     void emit_shl(uint8_t dst, uint8_t a, uint8_t b);
     void emit_shr(uint8_t dst, uint8_t a, uint8_t b);
     void emit_sar(uint8_t dst, uint8_t a, uint8_t b);
+    void emit_div(uint8_t dst, uint8_t a, uint8_t b);
+    void emit_x86_div(uint8_t src, uint8_t width, bool high_byte = false);
+    void emit_x86_div_mem(uint8_t base, int32_t offset, uint8_t width);
     void emit_mul(uint8_t dst, uint8_t a, uint8_t b);
     void emit_cmp(uint8_t a, uint8_t b);
     void emit_push(uint8_t src);
@@ -43,6 +46,7 @@ public:
     void emit_call_native_indirect(uint64_t target_slot_va);
     void emit_call_native_mem(uint8_t base, int32_t offset);
     void emit_call_native_reg(uint8_t target);
+    void emit_loop(uint8_t opcode, uint64_t target, uint8_t width);
     void emit_nop();
     void emit_ret();
     void emit_halt();
@@ -54,7 +58,10 @@ public:
     void emit_cmpxchg_mem64(uint8_t base, int32_t offset, uint8_t src);
     void emit_xchg_mem64(uint8_t base, int32_t offset, uint8_t reg);
 
+    void emit_cpuid();
+    void emit_rdtsc();
+    void emit_stosb();
+    void emit_rep_stosb();
+
     uint32_t get_current_position();
 };
-
-

@@ -1,9 +1,11 @@
 #include <print>
+#include <format>
 #include <Zydis/Zydis.h>
 #include <algorithm>
 #include <deque>
-#include <iostream>
+#include <cstdio>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
 #include "patcher.hpp"
@@ -14,7 +16,6 @@
 #include "disassembler.hpp"
 #include "x86_translator.hpp"
 #include "vm_interpreter.hpp"
-#include "pdb.hpp"
 
 static constexpr uint64_t vmp_marker_magic = 0x314B52414D504D56ull; // "VMPMARK1"
 
@@ -158,11 +159,50 @@ static std::vector<uint8_t> build_chunked_bytecode_blob(const std::vector<uint8_
     return chunked;
 }
 
-patcher::patcher(const std::string& input_path, const std::string& output, uint32_t target_rva, uint32_t target_size, const std::string& pdb_path)
+patcher::patcher(const std::string& input_path, const std::string& output, std::vector<std::pair<uint32_t, uint32_t>> targets)
+    : pe(LIEF::PE::Parser::parse(input_path)),
+    output_path(output)
+{
+    if (!pe) {
+        throw std::runtime_error("Failed to load input PE file");
+    }
+    if (targets.empty()) {
+        throw std::runtime_error("No functions selected");
+    }
+
+    rewriter_ = std::make_unique<pe_rewriter>(*pe);
+    uint64_t image_base = pe->imagebase();
+    uint32_t image_size = 0;
+    uint32_t section_align = pe->optional_header().section_alignment();
+    for (const auto& sect : pe->sections()) {
+        uint32_t end = static_cast<uint32_t>(sect.virtual_address() + sect.virtual_size());
+        if (end > image_size) {
+            image_size = end;
+        }
+    }
+    image_size = alignment::align_up(image_size, section_align);
+
+    for (auto [start, end] : targets) {
+        if (end <= start || end - start < 5) {
+            throw std::runtime_error("Selected function must contain at least 5 bytes for the entry jump");
+        }
+
+        uint32_t size = end - start;
+        if (!virtualize_region(start, size, image_base, image_size)) {
+            throw std::runtime_error(std::format("Failed to virtualize target RVA=0x{:X}", start));
+        }
+
+        std::println("Successfully virtualized target RVA=0x{:X}", start);
+    }
+
+    output_pe();
+}
+
+patcher::patcher(const std::string& input_path, const std::string& output, uint32_t target_rva, uint32_t target_size)
     : pe(LIEF::PE::Parser::parse(input_path)),
       output_path(output),
-      rewriter_(std::make_unique<pe_rewriter>(*pe)),
-      pdb_path_(pdb_path) {
+      rewriter_(std::make_unique<pe_rewriter>(*pe))
+    {
 
     uint64_t image_base = pe->imagebase();
     uint32_t image_size = 0;
@@ -277,52 +317,6 @@ bool patcher::virtualize_region(uint32_t target_rva, uint32_t target_size, uint6
     return true;
 }
 
-std::vector<std::vector<uint8_t>> patcher::get_code_at_marker() {
-    ZydisDecoder decoder;
-    ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
-
-    ZydisFormatter formatter;
-    ZydisFormatterInit(&formatter, ZYDIS_FORMATTER_STYLE_INTEL);
-    
-	auto vm_section = pe->get_section(".vmp");
-	auto section_content = vm_section->content();
-	auto base_rva = pe->imagebase();
-	auto section_rva = vm_section->virtual_address();
-    
-    std::vector<std::vector<uint8_t>> marked_opcodes;
-
-    size_t offset = 0x0;
-    while (offset <= section_content.size()) {
-        ZydisDecodedInstruction instr;
-        ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
-
-        if (ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder,
-            section_content.data() + offset,
-            section_content.size() - offset,
-            &instr, operands))) {
-
-            uint64_t instr_rva = section_rva + offset;
-			uint64_t instr_va = base_rva + instr_rva;
-
-            std::vector<uint8_t> bytes(section_content.begin() + offset, section_content.begin() + offset + instr.length);
-
-            for (auto c : bytes) {
-                std::cout << std::hex << (int)c << " ";
-            }
-            std::cout << std::endl;
-
-            marked_opcodes.push_back(bytes);
-
-            offset += instr.length;
-        }
-        else {
-            offset += 1;
-        }
-    }
-
-    return marked_opcodes;
-}
-
 std::vector<std::pair<uint32_t, uint32_t>> patcher::grab_rvas_from_markers() {
     auto* marker_section = pe->get_section(".mark");
     if (!marker_section) {
@@ -414,12 +408,6 @@ std::vector<std::pair<uint32_t, uint32_t>> patcher::grab_rvas_from_markers() {
     return regions;
 }
 
-std::vector<std::pair<uint32_t, uint32_t>> patcher::grab_rvas_from_pdb() {
-    std::println("pdb path: {}", pdb_path_);
-
-    return { {} };
-}
-
 std::vector<uint8_t> patcher::get_code_at_rva(uint32_t function_rva, uint32_t end_rva) {
     ZydisDecoder decoder;
     ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
@@ -470,7 +458,7 @@ std::vector<uint8_t> patcher::get_code_at_rva(uint32_t function_rva, uint32_t en
 
         if (ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder,
             section_content.data() + section_offset,
-            section_content.size() - section_offset,
+            end_rva - function_rva,
             &instr, operands))) {
 
             for (size_t i = 0; i < instr.length; ++i) {

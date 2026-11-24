@@ -1,6 +1,7 @@
 #include "x86_translator.hpp"
 #include <iostream>
 #include <cstring>
+#include <print>
 
 namespace {
     uint64_t mask_for_width(uint16_t width_bits) {
@@ -113,6 +114,7 @@ bool x86_translator::translate_instruction(const ZydisDecodedInstruction* instru
     case ZYDIS_MNEMONIC_INC: return translate_inc(operands);
     case ZYDIS_MNEMONIC_DEC: return translate_dec(operands);
     case ZYDIS_MNEMONIC_CDQ: return translate_cdq();
+    case ZYDIS_MNEMONIC_DIV: return translate_div(instruction, operands, current_addr);
     case ZYDIS_MNEMONIC_IMUL: return translate_imul(operands);
     case ZYDIS_MNEMONIC_CMP: return translate_cmp(instruction, operands, current_addr);
     case ZYDIS_MNEMONIC_CMPXCHG: return translate_cmpxchg(instruction, operands, current_addr);
@@ -130,18 +132,24 @@ bool x86_translator::translate_instruction(const ZydisDecodedInstruction* instru
     case ZYDIS_MNEMONIC_PUSH: return translate_push(operands);
     case ZYDIS_MNEMONIC_POP: return translate_pop(operands);
     case ZYDIS_MNEMONIC_CALL: return translate_call(instruction, operands, current_addr);
+	case ZYDIS_MNEMONIC_RDTSC: builder.emit_rdtsc(); return true;
+	case ZYDIS_MNEMONIC_CPUID: builder.emit_cpuid(); return true;
     case ZYDIS_MNEMONIC_RET: builder.emit_ret(); return true;
+    case ZYDIS_MNEMONIC_STOSB: return translate_stosb(instruction, operands);
     case ZYDIS_MNEMONIC_JMP: return translate_jump(instruction, operands, current_addr, op_jmp);
     case ZYDIS_MNEMONIC_JZ: return translate_jump(instruction, operands, current_addr, op_jz);
     case ZYDIS_MNEMONIC_JNZ: return translate_jump(instruction, operands, current_addr, op_jnz);
     case ZYDIS_MNEMONIC_JL: return translate_jump(instruction, operands, current_addr, op_jl);
     case ZYDIS_MNEMONIC_JLE: return translate_jump(instruction, operands, current_addr, op_jle);
-    case ZYDIS_MNEMONIC_JB: return translate_jump(instruction, operands, current_addr, op_jl);
-    case ZYDIS_MNEMONIC_JBE: return translate_jump(instruction, operands, current_addr, op_jle);
-    case ZYDIS_MNEMONIC_JNB: return translate_jump(instruction, operands, current_addr, op_jge);
-    case ZYDIS_MNEMONIC_JNBE: return translate_jump(instruction, operands, current_addr, op_jg);
+    case ZYDIS_MNEMONIC_JB: return translate_jump(instruction, operands, current_addr, op_jb);
+    case ZYDIS_MNEMONIC_JBE: return translate_jump(instruction, operands, current_addr, op_jbe);
+    case ZYDIS_MNEMONIC_JNB: return translate_jump(instruction, operands, current_addr, op_jae);
+    case ZYDIS_MNEMONIC_JNBE: return translate_jump(instruction, operands, current_addr, op_ja);
     case ZYDIS_MNEMONIC_JNL: return translate_jump(instruction, operands, current_addr, op_jge);
     case ZYDIS_MNEMONIC_JNLE: return translate_jump(instruction, operands, current_addr, op_jg);
+    case ZYDIS_MNEMONIC_LOOP: return translate_loop(instruction, operands, current_addr, op_loop);
+    case ZYDIS_MNEMONIC_LOOPE: return translate_loop(instruction, operands, current_addr, op_loope);
+    case ZYDIS_MNEMONIC_LOOPNE: return translate_loop(instruction, operands, current_addr, op_loopne);
     case ZYDIS_MNEMONIC_NOP: return translate_nop();
     case ZYDIS_MNEMONIC_INT3:
     case ZYDIS_MNEMONIC_INT:
@@ -175,7 +183,12 @@ bool x86_translator::resolve_memory_address(
     int32_t& offset) {
     const auto& mem = operand->mem;
 
-    if (mem.base == ZYDIS_REGISTER_RIP || mem.base == ZYDIS_REGISTER_NONE) {
+    // Keep addresses separate from the value temporaries (r30/r31) used by callers.
+    constexpr uint8_t address_reg = vm_scratch_register - 3;
+    constexpr uint8_t scale_reg = vm_scratch_register - 4;
+
+    if (mem.base == ZYDIS_REGISTER_RIP ||
+        (mem.base == ZYDIS_REGISTER_NONE && mem.index == ZYDIS_REGISTER_NONE)) {
         uint64_t target = 0;
         if (mem.base == ZYDIS_REGISTER_RIP) {
             if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(instruction, operand, current_addr, &target))) {
@@ -187,7 +200,7 @@ bool x86_translator::resolve_memory_address(
 
         uint64_t encoded = 0;
         get_image_relative_or_absolute(target, encoded);
-        base = vm_scratch_register;
+        base = address_reg;
         if (image_base != 0 && image_size != 0 && target >= image_base && target < (image_base + image_size)) {
             builder.emit_mov_imm(base, encoded);
             builder.emit_add(base, base, vm_image_base_register);
@@ -198,11 +211,21 @@ bool x86_translator::resolve_memory_address(
         return true;
     }
 
-    if (mem.base == ZYDIS_REGISTER_NONE) {
-        return false;
+    if (mem.index != ZYDIS_REGISTER_NONE) {
+        const uint8_t index = reg_mapper.get_vm_register(mem.index);
+        builder.emit_mov_reg(address_reg, index);
+        if (mem.scale > 1) {
+            builder.emit_mov_imm(scale_reg, mem.scale);
+            builder.emit_mul(address_reg, address_reg, scale_reg);
+        }
+        if (mem.base != ZYDIS_REGISTER_NONE) {
+            builder.emit_add(address_reg, reg_mapper.get_vm_register(mem.base), address_reg);
+        }
+        base = address_reg;
+    } else {
+        base = reg_mapper.get_vm_register(mem.base);
     }
 
-    base = reg_mapper.get_vm_register(mem.base);
     offset = static_cast<int32_t>(mem.disp.value);
     return true;
 }
@@ -580,6 +603,38 @@ bool x86_translator::translate_test(const ZydisDecodedOperand* operands) {
     builder.emit_mov_imm(zero_reg, 0);
     builder.emit_cmp(temp_reg, zero_reg);
     return true;
+}
+
+bool x86_translator::translate_div(const ZydisDecodedInstruction* instruction,
+    const ZydisDecodedOperand* operands, uint64_t current_addr) {
+    const auto& divisor = operands[0];
+    const auto width = static_cast<uint8_t>(divisor.size);
+    if (width != 8 && width != 16 && width != 32 && width != 64) {
+        return false;
+    }
+
+    if (divisor.type == ZYDIS_OPERAND_TYPE_REGISTER) {
+        const auto reg = divisor.reg.value;
+        const bool high_byte = reg == ZYDIS_REGISTER_AH || reg == ZYDIS_REGISTER_BH ||
+                               reg == ZYDIS_REGISTER_CH || reg == ZYDIS_REGISTER_DH;
+        builder.emit_x86_div(reg_mapper.get_vm_register(reg), width, high_byte);
+        return true;
+    }
+    if (divisor.type == ZYDIS_OPERAND_TYPE_MEMORY) {
+        if (instruction->address_width != 64 ||
+            divisor.mem.segment == ZYDIS_REGISTER_FS || divisor.mem.segment == ZYDIS_REGISTER_GS) {
+            printf("  -> Unsupported DIV memory addressing mode\n");
+            return false;
+        }
+        uint8_t base = 0;
+        int32_t offset = 0;
+        if (!resolve_memory_address(instruction, &divisor, current_addr, base, offset)) {
+            return false;
+        }
+        builder.emit_x86_div_mem(base, offset, width);
+        return true;
+    }
+    return false;
 }
 
 bool x86_translator::translate_imul(const ZydisDecodedOperand* operands) {
@@ -963,6 +1018,17 @@ bool x86_translator::translate_call(const ZydisDecodedInstruction* instruction,
     return false;
 }
 
+bool x86_translator::translate_loop(const ZydisDecodedInstruction* instruction, const ZydisDecodedOperand* operand, uint64_t current_call, uint8_t vm_loop_type) {
+    uint64_t target = 0;
+
+    if (!ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(instruction, &operand[0], current_call, &target))) {
+        return false;
+    }
+
+    builder.emit_loop(vm_loop_type, target, instruction->address_width);
+    return true;
+}
+
 bool x86_translator::translate_xorps(const ZydisDecodedOperand* operands) {
     if (operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
         operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
@@ -1118,6 +1184,24 @@ bool x86_translator::translate_setz(const ZydisDecodedOperand* operands) {
     builder.emit_or(dst, dst, vm_scratch_register);
     builder.mark_jump_target(done);
     return true;
+}
+
+bool x86_translator::translate_stosb(const ZydisDecodedInstruction* instruction, const ZydisDecodedOperand* operands) {
+    const bool has_rep = (instruction->attributes & ZYDIS_ATTRIB_HAS_REP) != 0;
+    const bool has_repne = (instruction->attributes & ZYDIS_ATTRIB_HAS_REPNE) != 0;
+
+    if (has_rep) {
+        builder.emit_rep_stosb();
+        return true;
+    } else if (has_repne) {
+        // ...
+        return true;
+    } else {
+        builder.emit_stosb();
+        return true;
+    }
+
+    return false;
 }
 
 bool x86_translator::translate_jump(const ZydisDecodedInstruction* instruction,

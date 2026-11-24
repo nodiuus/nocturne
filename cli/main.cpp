@@ -4,6 +4,9 @@
 #include <vector>
 #include <print>
 #include <cctype>
+#include <algorithm>
+#include <sstream>
+#include <Windows.h>
 
 #include <argparse/argparse.hpp>
 
@@ -12,6 +15,8 @@
 #include "core/x86_translator.hpp"
 #include "core/vm_interpreter.hpp"
 #include "core/patcher.hpp"
+
+#include "core/pdb.hpp"
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -82,7 +87,67 @@ int main(int argc, char* argv[]) {
 
             std::println("Using PDB: {}", pdb_path);
 
-            // TODO: PDB patcher logic
+            pdb_parser pdb_parse(pdb_path);
+            const auto& symbols = pdb_parse.get_symbols();
+            if (symbols.empty()) {
+                std::println("Error: no functions found in PDB");
+                return 1;
+            }
+
+            pdb_parse.print_undecorated_names();
+
+            std::println("\nEnter which functions you want to virtualize\nExample: 1,2,3,...");
+
+            std::string input_line;
+            std::print(">");
+            if (!std::getline(std::cin, input_line)) {
+                std::println("Error: no functions selected");
+                return 1;
+            }
+
+            const auto last = input_line.find_last_not_of(" \t\r\n");
+            if (last == std::string::npos || input_line[last] == ',') {
+                std::println("Error: expected a comma-separated list of function indices");
+                return 1;
+            }
+
+            std::vector<int> selected_indices;
+            std::stringstream ss(input_line);
+            std::string token;
+
+            while (std::getline(ss, token, ',')) {
+                const auto first = token.find_first_not_of(" \t\r\n");
+                if (first == std::string::npos) {
+                    std::println("Error: empty function index");
+                    return 1;
+                }
+
+                token = token.substr(first, token.find_last_not_of(" \t\r\n") - first + 1);
+                size_t parsed = 0;
+                const int index = std::stoi(token, &parsed);
+                if (parsed != token.size() || index < 0 || static_cast<size_t>(index) >= symbols.size()) {
+                    std::println("Error: invalid function index '{}'", token);
+                    return 1;
+                }
+
+                selected_indices.push_back(index);
+            }
+
+            std::vector<std::pair<uint32_t, uint32_t>> rvas;
+
+            for (const auto& index : selected_indices) {
+                const auto& symbol = symbols[index];
+                const std::pair<uint32_t, uint32_t> range = {
+                    static_cast<uint32_t>(symbol.start_rva), static_cast<uint32_t>(symbol.end_rva)
+                };
+                if (std::find(rvas.begin(), rvas.end(), range) != rvas.end())
+                    continue;
+
+                rvas.push_back(range);
+                std::println("Selected function: {}, 0x{:X} -> 0x{:X}", pdb_parse.to_utf8(symbol.undecorated_name), symbol.start_rva, symbol.end_rva);
+            }
+
+            patcher binary_patcher(input_pe, output_pe, rvas);
         }
         else if (target_mode == "rva") {
             if (mode_args.size() != 2) {

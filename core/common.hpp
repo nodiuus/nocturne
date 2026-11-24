@@ -80,8 +80,26 @@ enum opcode_t : uint8_t {
    op_print = 0x20,
    op_push = 0x30,
    op_pop = 0x31,
+   op_loop = 0x32,
+   op_loope = 0x33,
+   op_loopne = 0x34,
    op_call = 0x40,
    op_ret = 0x41,
+   op_cpuid = 0x42,
+   op_rdtsc = 0x43,
+   op_stosb = 0x44,
+   op_rep_stosb = 0x45,
+   op_x86_div = 0x46,
+   op_jb = 0x47,
+   op_jbe = 0x48,
+   op_jae = 0x49,
+   op_ja = 0x4a,
    op_halt = 0xFE,
    opcode_size,
+};
+
+enum div_source_t : uint8_t {
+    div_register,
+    div_high_byte,
+    div_memory
 };
